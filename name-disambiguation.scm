@@ -1,9 +1,13 @@
 (use-modules (ice-9 rdelim))
 
-(define symbol-filename "")
 (define symbol-alist '())
 
-(define (download-symbols)
+(define* (download-symbols #:optional
+            (symbol-filename
+                (string-append
+                    "gene_names_"
+                    (strftime "%d-%m-%y" (localtime (current-time)))
+                    ".txt")))
 "
 Download all the gene symbols -- Approved symbol, Previous symbols,
 and Alias symbols, from genenames.org.
@@ -18,8 +22,6 @@ and Alias symbols, from genenames.org.
               "hgnc_dbtag=on&"
               "order_by=gd_app_sym_sort&"
               "format=text&submit=submit"))
-    (set! symbol-filename
-        (string-append "gene_names_" (strftime "%d-%m-%y" (localtime (current-time))) ".txt"))
 
     (system (string-append "curl '" base-url (string-join args "") "' --output " symbol-filename))
 )
