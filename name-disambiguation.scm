@@ -25,3 +25,33 @@ and Alias symbols, from genenames.org.
 
     (system (string-append "curl '" base-url (string-join args "") "' --output " symbol-filename))
 )
+
+(define (read-symbols-from-file filename)
+    (let ((port (open-input-file filename))
+          ; Skip the first line
+          (line (read-line port)))
+        (set! line (read-line port))
+        (while (not (eof-object? line))
+            (let ((symbols
+                    (delete
+                        ""
+                        (string-split
+                            (string-delete #\space line)
+                            (lambda (c) (or (char=? c #\tab) (char=? c #\,)))
+                        )
+                    )
+                 ))
+                (for-each
+                    (lambda (symbol)
+                        (set! symbol-alist
+                            (assoc-set! symbol-alist symbol (delete symbol symbols)))
+; (format #t "----- Looking at symbol: ~a\nand the values: ~a\n\n" symbol (assoc-ref symbol-alist symbol))
+                    )
+                    symbols
+                )
+            )
+            (set! line (read-line port))
+        )
+        (close-port port)
+    )
+)
