@@ -384,7 +384,7 @@ equivalence_feature_gene() {
 (EquivalenceLink (stv 1 1)
     (PredicateNode "$pred")
     (ExecutionOutputLink
-        (GroundedSchemaNode "scm: make-has-$zygous-SNP-predicate")
+        (GroundedSchemaNode "scm: make-predicate")
         (GeneNode "$gene")))
 EOF
 }
@@ -504,6 +504,20 @@ do
 
             # Finally, generate the EquivalenceLink Atomese
             equivalence_feature_gene "$feature" "$gene"
+        done
+
+        # For Gene ID format like: ENSG00000140795.8
+        for feature in $(echo $model | grep -o "ENSG[0-9]\+.[0-9]\+")
+        do
+            feature_reformatted=$(echo $feature | sed -e 's/\.[0-9]\+//')
+
+            if [[ -v feature_gene_map[$feature_reformatted] ]]
+            then
+                gene=$(echo "${feature_gene_map[$feature_reformatted]}" | sed -r "s/\.[0-9]+//")
+                equivalence_feature_gene "$feature_reformatted" "$gene"
+            else
+                echo ";; XXX $feature_reformatted is missing..."
+            fi
         done
     fi
 done <<< $(tail -n +3 $MODEL_RESULT_FILE) > "$OUTPUT_FILE"
