@@ -16,44 +16,45 @@
 (format #t "--- Turning EvaluationLinks into MemberLinks...\n")
 (define go-preds (list "GO_positively_regulates" "GO_negatively_regulates"))
 (define string-preds (list "reaction" "catalysis" "inhibition" "ptmod" "expression" "binding" "activation"))
+
+; TODO: To be replaced by an actual PLN rule
 (pln-load-from-path "pln/rules/wip/evaluation-to-member.scm")
-; TODO: To be replaced by a PLN rule
 (define (evaluation-to-member pred)
-  (BindLink
+  (Bind
     (VariableList
-      (VariableNode "$A")
-      (VariableNode "$B"))
-    (EvaluationLink
+      (Variable "$A")
+      (Variable "$B"))
+    (Evaluation
       pred
-      (ListLink
-        (VariableNode "$A")
-        (VariableNode "$B")))
-    (ExecutionOutputLink
-      (GroundedSchemaNode "scm: evaluation-to-member-2-formula")
-        (ListLink
-          (MemberLink
-            (VariableNode "$A")
-            (SatisfyingSetScopeLink
-              (VariableNode "$X")
-              (EvaluationLink
+      (List
+        (Variable "$A")
+        (Variable "$B")))
+    (ExecutionOutput
+      (GroundedSchema "scm: evaluation-to-member-2-formula")
+        (List
+          (Member
+            (Variable "$A")
+            (SatisfyingSetScope
+              (Variable "$X")
+              (Evaluation
                 pred
-                (ListLink
-                  (VariableNode "$X")
-                  (VariableNode "$B")))))
-          (MemberLink
-            (VariableNode "$B")
-            (SatisfyingSetScopeLink
-              (VariableNode "$Y")
-              (EvaluationLink
+                (List
+                  (Variable "$X")
+                  (Variable "$B")))))
+          (Member
+            (Variable "$B")
+            (SatisfyingSetScope
+              (Variable "$Y")
+              (Evaluation
                 pred
-                (ListLink
-                  (VariableNode "$A")
-                  (VariableNode "$Y")))))
-          (EvaluationLink
+                (List
+                  (Variable "$A")
+                  (Variable "$Y")))))
+          (Evaluation
             pred
-            (ListLink
-              (VariableNode "$A")
-              (VariableNode "$B")))))))
+            (List
+              (Variable "$A")
+              (Variable "$B")))))))
 
 (define step-1-results
   (append-map
@@ -66,8 +67,9 @@
 (write-atoms-to-file "results/pln-step-1.scm" step-1-results)
 
 ;; --- Step 2: Turn the SatisfyingSetScopeLinks created in step 1 into ConceptNodes
-; TODO: To be replaced by a PLN rule
 (format #t "--- Turning SatisfyingSetScopeLinks into ConceptNodes...\n")
+
+; TODO: To be replaced by an actual PLN rule
 (define (sat-set-to-concept s)
   (Concept
     (string-join
@@ -87,19 +89,35 @@
             (GroundedSchema "scm: sat-set-to-concept")
             (List (Variable "$Y"))))))))
 
+(for-each cog-extract-recursive (cog-get-atoms 'SatisfyingSetScopeLinks))
+
 (write-atoms-to-file "results/pln-step-2.scm" step-2-results)
 
 ;; --- Step 3: Generate SubsetLinks for the above members
 (format #t "--- Directly introducing SubsetLinks for the concepts...\n")
-(define (inh-from-pair p) (Inheritance (gar p) (gdr p)))
-(define (rev-inh-from-pair p) (Inheritance (gdr p) (gar p)))
-(define all-members
-  (append (get-member-links 'GeneNode 'ConceptNode) (get-member-links 'ConceptNode 'ConceptNode)))
-(define inhs (map inh-from-pair all-members))
-(define rev-inhs (map rev-inh-from-pair all-members))
-(define all-inhs (append inhs rev-inhs))
-(pln-add-rule-by-name "subset-direct-introduction-rule")
-(define step-3-results (append (cog-get-atoms 'SubsetLink) (append-map cog-outgoing-set (map pln-bc all-inhs))))
+
+; TODO: To be replaced by an actual PLN rule
+(pln-load-from-path "pln/rules/extensional/subset-direct-introduction.scm")
+(define step-3-results
+  (append-map
+    cog-outgoing-set
+    (cog-outgoing-set
+      (cog-execute!
+        (Bind
+          (VariableSet
+            (TypedVariable (Variable "$X") (TypeChoice (Type "ConceptNode") (Type "GeneNode")))
+            (TypedVariable (Variable "$Y") (Type "ConceptNode")))
+          (Present
+            (Variable "$X")
+            (Variable "$Y"))
+          (ExecutionOutput
+            (GroundedSchema "scm: subset-direct-introduction")
+            (List
+              ;; Conclusion
+              (Subset (Variable "$X") (Variable "$Y"))
+              ;; Premises
+              (Variable "$X")
+              (Variable "$Y"))))))))
 
 (write-atoms-to-file "results/pln-step-3.scm" step-3-results)
 
@@ -122,13 +140,6 @@
 
 ;; --- Step 5: Calculate and/or assign TVs
 (format #t "--- Assigning TVs to all the members...\n")
-(define results-lst-with-tvs
-  (map
-    (lambda (x) (cog-set-tv! x (stv 1 1)))
-    (append
-      step-4-results
-      ; These are the existing members in the kbs
-      (get-member-links 'GeneNode 'ConceptNode))))
 (define genes (get-genes))
 (define go-categories (get-go-categories))
 (define usize (length genes))
@@ -161,24 +172,8 @@
 
 (write-atoms-to-file "results/pln-step-7.scm" step-7-results)
 
-;; --- Step 8: Filter out relationships involving GO concepts with null mean
-(format #t "--- Filtering out relationships...\n")
-(define non-null-go-categories-with-tvs
-  (filter non-null-mean? go-categories-with-tvs))
-(define non-null-results-lst-with-tvs
-  (filter all-nodes-non-null-mean? results-lst-with-tvs))
-(define non-null-inversed-go-subsets-with-pos-tvs
-  (filter all-nodes-non-null-mean? inversed-go-subsets-with-pos-tvs))
-(define non-null-attractions
-  (filter all-nodes-non-null-mean? (cog-outgoing-set step-7-results)))
+;; --- Step 8: Output AttractionLinks with null mean
+(format #t "--- Filtering out AttractionLinks...\n")
+(define non-null-attractions (filter all-nodes-non-null-mean? (cog-outgoing-set step-7-results)))
 
-;; --- Step 9: Write results in file
-(format #t "--- Writing final results...\n")
-(define all-results
-  (append
-    non-null-go-categories-with-tvs
-    non-null-results-lst-with-tvs
-    non-null-inversed-go-subsets-with-pos-tvs
-    non-null-attractions))
-
-(write-atoms-to-file "results/pln-stage-1.scm" all-results)
+(write-atoms-to-file "results/pln-attractions.scm" non-null-attractions)

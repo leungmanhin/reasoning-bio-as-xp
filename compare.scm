@@ -136,5 +136,5 @@
 )
 
 (display (get-results 0.1 0.25)) (newline)
-(display (get-results 0.2 0.25)) (newline)
-(display (get-results 0.3 0.25)) (newline)
+; (display (get-results 0.2 0.25)) (newline)
+; (display (get-results 0.3 0.25)) (newline)

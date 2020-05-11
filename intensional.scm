@@ -2,10 +2,10 @@
 
 (load "bio-as-utils.scm")
 
-; (load-kbs (list "results/pln-stage-1.scm"))
-(primitive-load "results/pln-step-7.scm.bk2")
+; (primitive-load "results/pln-attractions.scm")
+(primitive-load "results/pln-step-6.scm")
 (define input-file "dw_pairs.txt")
-(define result-file "results/pln-step-10-intsim.scm")
+(define result-file "results/pln-intensional-similarities.scm")
 
 ;; ---------- GO pairs ---------- ;;
 (pln-load 'empty)
