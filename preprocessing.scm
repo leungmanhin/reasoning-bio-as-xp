@@ -90,29 +90,21 @@
 (write-atoms-to-file "results/pln-step-2.scm" step-2-results)
 
 ;; --- Step 3: Generate SubsetLinks for the above members
-(format #t "--- Directly introducting SubsetLinks for the concepts...\n")
+(format #t "--- Directly introducing SubsetLinks for the concepts...\n")
 (define (inh-from-pair p) (Inheritance (gar p) (gdr p)))
-(define indirect-pairs
-  (cog-outgoing-set
-    (cog-execute!
-      (Bind
-        (VariableSet
-          (TypedVariable (Variable "$X") (TypeChoice (Type "ConceptNode") (Type "GeneNode")))
-          (TypedVariable (Variable "$Y") (Type "ConceptNode"))
-          (TypedVariable (Variable "$Z") (Type "ConceptNode")))
-        (And
-          (Present
-            (Member (Variable "$X") (Variable "$Y"))
-            (Member (Variable "$X") (Variable"$Z")))
-          (Not (Equal (Variable"$Y") (Variable"$Z"))))
-        (List (Variable "$Y") (Variable"$Z"))))))
-(define all-inhs (map inh-from-pair indirect-pairs))
+(define (rev-inh-from-pair p) (Inheritance (gdr p) (gar p)))
+(define all-members
+  (append (get-member-links 'GeneNode 'ConceptNode) (get-member-links 'ConceptNode 'ConceptNode)))
+(define inhs (map inh-from-pair all-members))
+(define rev-inhs (map rev-inh-from-pair all-members))
+(define all-inhs (append inhs rev-inhs))
 (pln-add-rule-by-name "subset-direct-introduction-rule")
 (define step-3-results (append (cog-get-atoms 'SubsetLink) (append-map cog-outgoing-set (map pln-bc all-inhs))))
 
 (write-atoms-to-file "results/pln-step-3.scm" step-3-results)
 
 ;; --- Step 4: Infer new members
+(format #t "--- Inferring new members...\n")
 (pln-load-from-path "rules/translation.scm")
 (pln-load-from-path "rules/transitivity.scm")
 (pln-add-rule-by-name "present-inheritance-to-subset-translation-rule")
