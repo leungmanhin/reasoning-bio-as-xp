@@ -10,7 +10,6 @@
 
 ;; --- Step 1: Turn the "positively/negatively regulates" relations represented in EvaluationLinks into MemberLinks
 (format #t "--- Turning EvaluationLinks into MemberLinks...\n")
-(define go-preds (list "GO_positively_regulates" "GO_negatively_regulates"))
 
 ; TODO: To be replaced by an actual PLN rule
 (pln-load-from-path "pln/rules/wip/evaluation-to-member.scm")
@@ -57,7 +56,7 @@
     (append-map
       (lambda (p)
         (cog-outgoing-set (cog-execute! (evaluation-to-member (Predicate p)))))
-      go-preds)))
+      (list "GO_positively_regulates" "GO_negatively_regulates"))))
 
 (write-atoms-to-file "results/pln-step-1.scm" step-1-results)
 
@@ -92,9 +91,11 @@
 (format #t "--- Inferring new members...\n")
 (pln-load-from-path "rules/translation.scm")
 (pln-load-from-path "rules/transitivity.scm")
+(pln-load-from-path "pln/rules/wip/inheritance-to-member.scm")
 (pln-add-rule-by-name "present-inheritance-to-subset-translation-rule")
 (pln-add-rule-by-name "present-subset-transitivity-rule")
 (pln-add-rule-by-name "present-mixed-member-subset-transitivity-rule")
+(pln-add-rule-by-name "inheritance-to-member-rule")
 (define step-3-results
   (cog-outgoing-set
     (pln-fc
@@ -112,11 +113,13 @@
 (format #t "--- Assigning TVs to all the members...\n")
 (define genes (get-genes))
 (define go-categories (get-go-categories))
-(define usize (length genes))
+(define usize (length ((append genes go-categories))))
 (define (concept-mean x) (exact->inexact (/ (get-cardinality x) usize)))
 (define (concept-tv x) (stv (concept-mean x) (count->confidence usize)))
 (define go-categories-with-tvs
   (map (lambda (x) (cog-set-tv! x (concept-tv x))) go-categories))
+
+(write-atoms-to-file "results/pln-step-4.scm" go-categories-with-tvs)
 
 ;; --- Step 5: Infer inverse SubsetLinks
 (format #t "--- Inferring inverse SubsetLinks...\n")
@@ -124,6 +127,8 @@
 (define inversed-go-subsets (map true-subset-inverse go-subsets))
 (define inversed-go-subsets-with-pos-tvs
   (filter gt-zero-mean-and-confidence? inversed-go-subsets))
+
+(write-atoms-to-file "results/pln-step-5.scm" inversed-go-subsets-with-pos-tvs)
 
 ;; --- Step 6: Infer all AttractionLinks
 (format #t "--- Inferring all AttractionLinks...\n")

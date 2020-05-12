@@ -42,7 +42,7 @@
         (cog-name (gar x))
         (cog-name (gdr x))
         (if (equal? (stv 1 0) (cog-tv x))
-          0
+          "NA"
           (cog-mean x)
         )
       )
