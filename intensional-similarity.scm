@@ -2,7 +2,7 @@
 
 (load "bio-as-utils.scm")
 
-; (primitive-load "results/pln-attractions.scm")
+; (primitive-load "results/pln-preprocessing.scm")
 (primitive-load "results/pln-step-6.scm")
 (define input-file "dw_pairs.txt")
 (define result-file "results/pln-intensional-similarities.scm")
