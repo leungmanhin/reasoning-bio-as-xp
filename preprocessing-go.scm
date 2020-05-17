@@ -1,4 +1,10 @@
-(use-modules (opencog) (opencog bioscience) (opencog exec) (opencog ure) (opencog pln))
+(use-modules
+  (ice-9 rdelim)
+  (opencog)
+  (opencog bioscience)
+  (opencog exec)
+  (opencog pln)
+  (opencog ure))
 
 (load "bio-as-utils.scm")
 
@@ -157,3 +163,10 @@
     (cog-get-atoms 'MemberLink)
     (cog-get-atoms 'SubsetLink)
     (cog-get-atoms 'AttractionLink)))
+
+; ----- Step 7: Estimate the intensional similarity between GOs
+(pln-load 'empty)
+(pln-add-rule-by-name "intensional-similarity-direct-introduction-rule")
+(pln-bc (IntensionalSimilarity (Variable "$X") (Variable "$Y")))
+
+(write-atoms-to-file "results/pln-intensional-similarities.scm" (cog-get-atoms 'IntensionalSimilarityLink))
