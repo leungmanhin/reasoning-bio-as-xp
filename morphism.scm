@@ -10,15 +10,15 @@
 
 (primitive-load "kbs/GO_2020-04-01.scm")
 (primitive-load "kbs/GO_annotation_gene-level_2020-04-01.scm")
-(primitive-load "kbs/Go-Plus.scm")
-
-(pln-load 'empty)
+(primitive-load "kbs/Go-Plus-GO_2020-05-04.scm")
 
 ;; --- Step 1: Turn the "positively/negatively regulates" relations represented in EvaluationLinks into MemberLinks
 (format #t "--- Turning EvaluationLinks into MemberLinks...\n")
 
+(pln-load 'empty)
 ; TODO: To be replaced by an actual PLN rule
 (pln-load-from-path "pln/rules/wip/evaluation-to-member.scm")
+
 (define (evaluation-to-member pred)
   (Bind
     (VariableList
@@ -31,30 +31,30 @@
         (Variable "$B")))
     (ExecutionOutput
       (GroundedSchema "scm: evaluation-to-member-2-formula")
-        (List
-          (Member
+      (List
+        (Member
+          (Variable "$A")
+          (SatisfyingSetScope
+            (Variable "$X")
+            (Evaluation
+              pred
+              (List
+                (Variable "$X")
+                (Variable "$B")))))
+        (Member
+          (Variable "$B")
+          (SatisfyingSetScope
+            (Variable "$Y")
+            (Evaluation
+              pred
+              (List
+                (Variable "$A")
+                (Variable "$Y")))))
+        (Evaluation
+          pred
+          (List
             (Variable "$A")
-            (SatisfyingSetScope
-              (Variable "$X")
-              (Evaluation
-                pred
-                (List
-                  (Variable "$X")
-                  (Variable "$B")))))
-          (Member
-            (Variable "$B")
-            (SatisfyingSetScope
-              (Variable "$Y")
-              (Evaluation
-                pred
-                (List
-                  (Variable "$A")
-                  (Variable "$Y")))))
-          (Evaluation
-            pred
-            (List
-              (Variable "$A")
-              (Variable "$B")))))))
+            (Variable "$B")))))))
 
 (define step-1-results
   (append-map
@@ -95,6 +95,8 @@
 
 ;; --- Step 3: Infer new members
 (format #t "--- Inferring new members...\n")
+
+(pln-load 'empty)
 (pln-load-from-path "rules/translation.scm")
 (pln-load-from-path "rules/transitivity.scm")
 ; (Inheritance C1 C2) |- (Subset C1 C2)
@@ -103,6 +105,7 @@
 (pln-add-rule-by-name "present-subset-transitivity-rule")
 ; (Member G C1) (Subset C1 C2) |- (Member G C2)
 (pln-add-rule-by-name "present-mixed-member-subset-transitivity-rule")
+
 (define step-3-results
   (cog-outgoing-set
     (pln-fc
@@ -134,14 +137,20 @@
 ;; --- Step 5: Infer inverse SubsetLinks
 (format #t "--- Inferring inverse SubsetLinks...\n")
 (define go-subsets (get-go-subsets))
+; (Subset A B) -> (Subset B A)
 (define inversed-go-subsets (map true-subset-inverse go-subsets))
 
 (write-atoms-to-file "results/pln-step-5.scm" inversed-go-subsets)
 
 ;; --- Step 6: Infer all AttractionLinks
 (format #t "--- Inferring all AttractionLinks...\n")
+
+(pln-load 'empty)
+; (Subset A B) |- (Subset (Not A) B)
 (pln-add-rule-by-name "subset-condition-negation-rule")
+; (Subset A B) (Subset (Not A) B) |- (Attraction A B)
 (pln-add-rule-by-name "subset-attraction-introduction-rule")
+
 (define step-6-results
   (cog-outgoing-set
     (pln-bc
@@ -155,18 +164,35 @@
 
 (write-atoms-to-file "results/pln-step-6.scm" step-6-results)
 
+#!
+; ----- Step 7: Estimate the intensional similarity between GOs
+(format #t "--- Inferring all IntensionalSimilarityLinks...\n")
+(pln-load 'empty)
+(pln-add-rule-by-name "intensional-similarity-direct-introduction-rule")
+(define step-7-results
+  (cog-outgoing-set
+    (pln-bc (IntensionalSimilarity (Variable "$X") (Variable "$Y")))))
+
+(write-atoms-to-file "results/pln-step-7.scm" step-7-results)
+
+; ----- Step 8: Estimate the intensional difference between GOs
+(format #t "--- Inferring all IntensionalDifferenceLinks...\n")
+(pln-load 'empty)
+(pln-add-rule-by-name "intensional-difference-direct-introduction-rule")
+(define step-8-results
+  (cog-outgoing-set
+    (pln-bc (IntensionalDifference (Variable "$X") (Variable "$Y")))))
+
+(write-atoms-to-file "results/step-8-results.scm" step-8-results))
+!#
+
 ;; --- Export everything that would be useful
-(write-atoms-to-file "results/pln-preprocessing.scm"
+(write-atoms-to-file "results/pln-morphism.scm"
   (append
     genes
     go-categories
     (cog-get-atoms 'MemberLink)
     (cog-get-atoms 'SubsetLink)
-    (cog-get-atoms 'AttractionLink)))
-
-; ----- Step 7: Estimate the intensional similarity between GOs
-(pln-load 'empty)
-(pln-add-rule-by-name "intensional-similarity-direct-introduction-rule")
-(pln-bc (IntensionalSimilarity (Variable "$X") (Variable "$Y")))
-
-(write-atoms-to-file "results/pln-intensional-similarities.scm" (cog-get-atoms 'IntensionalSimilarityLink))
+    (cog-get-atoms 'AttractionLink)
+    (cog-get-atoms 'IntensionalSimilarityLink)
+    (cog-get-atoms 'IntensionalDifferenceLink)))
