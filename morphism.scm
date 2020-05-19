@@ -6,8 +6,17 @@
   (opencog pln)
   (opencog ure))
 
+;; --- Utils
 (load "bio-as-utils.scm")
 
+(define (gather-cardinality)
+  (define alist (list))
+  (for-each
+    (lambda (go) (set! alist (assoc-set! alist (cog-name go) (get-cardinality go))))
+    (get-go-categories))
+  alist)
+
+;; --- Load knowledge bases
 (primitive-load "kbs/GO_2020-04-01.scm")
 (primitive-load "kbs/GO_annotation_gene-level_2020-04-01.scm")
 (primitive-load "kbs/Go-Plus-GO_2020-05-04.scm")
@@ -93,6 +102,8 @@
 
 (write-atoms-to-file "results/pln-step-2.scm" step-2-results)
 
+(define go-cardinality-alist (gather-cardinality))
+
 ;; --- Step 3: Infer new members
 (format #t "--- Inferring new members...\n")
 
@@ -118,6 +129,8 @@
       #:fc-full-rule-application #t)))
 
 (write-atoms-to-file "results/pln-step-3.scm" step-3-results)
+
+(define inferred-go-cardinality-alist (gather-cardinality))
 
 ;; --- Step 4: Calculate and/or assign TVs
 (format #t "--- Assigning TVs to all the members/subsets...\n")
@@ -196,3 +209,17 @@
     (cog-get-atoms 'AttractionLink)
     (cog-get-atoms 'IntensionalSimilarityLink)
     (cog-get-atoms 'IntensionalDifferenceLink)))
+
+; Other info in CSV format
+(define csv-fp (open-output-file "results/GO-terms"))
+(display "GO term, Initial Cardinality, Final Cardinality\n" csv-fp)
+(for-each
+  (lambda (go)
+    (display
+      (format #f "~a, ~a, ~a\n"
+        (cog-name go)
+        (assoc-ref go-cardinality-alist (cog-name go))
+        (assoc-ref inferred-go-cardinality-alist (cog-name go)))
+      csv-fp))
+  go-categories)
+(close-port csv-fp)
