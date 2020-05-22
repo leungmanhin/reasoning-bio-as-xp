@@ -65,7 +65,7 @@
             (Variable "$A")
             (Variable "$B")))))))
 
-(define step-1-results
+(define members-sat
   (append-map
     cog-outgoing-set
     (append-map
@@ -73,9 +73,7 @@
         (cog-outgoing-set (cog-execute! (evaluation-to-member (Predicate p)))))
       (list "GO_positively_regulates" "GO_negatively_regulates"))))
 
-(write-atoms-to-file "results/pln-step-1.scm" step-1-results)
-
-;; --- Step 2: Turn the SatisfyingSetScopeLinks created in step 1 into ConceptNodes
+; Then turn the SatisfyingSetScopeLinks created above into ConceptNodes
 (format #t "--- Turning SatisfyingSetScopeLinks into ConceptNodes...\n")
 
 ; TODO: To be replaced by an actual PLN rule
@@ -84,7 +82,7 @@
     (string-join
       (list (cog-name (gadr s)) (cog-name (gaddr s)) (cog-name (gdddr s)))
       "-")))
-(define step-2-results
+(define step-1-results
   (cog-outgoing-set
     (cog-execute!
       (Bind
@@ -100,9 +98,15 @@
 
 (for-each cog-extract-recursive (cog-get-atoms 'SatisfyingSetScopeLink))
 
-(write-atoms-to-file "results/pln-step-2.scm" step-2-results)
+(write-atoms-to-file "results/pln-step-1.scm" step-1-results)
 
 (define go-cardinality-alist (gather-cardinality))
+
+;; --- Step 2: Turn the MemberLinks created in step 1 into InheritanceLinks
+(format #t "--- Turning MemberLinks into InheritanceLinks...\n")
+(define step-2-results (map (lambda (x) (Inheritance (gar x) (gdr x))) step-1-results))
+
+(write-atoms-to-file "results/pln-step-2.scm" step-2-results)
 
 ;; --- Step 3: Infer new members
 (format #t "--- Inferring new members...\n")
@@ -138,20 +142,25 @@
   (lambda (x) (cog-set-tv! x (stv 1 1)))
   (append (cog-get-atoms 'MemberLink) (cog-get-atoms 'SubsetLink)))
 (define genes (get-genes))
-(define go-categories (get-go-categories))
+(define go-terms (get-go-categories))
+(define go-related-terms
+  (filter
+    (lambda (c)
+      (or (string-prefix? "GO_positively_regulates" (cog-name c))
+          (string-prefix? "GO_negatively_regulates" (cog-name c))))
+    (cog-get-atoms 'ConceptNode)))
 (define usize (length genes))
 (define (concept-mean x) (exact->inexact (/ (get-cardinality x) usize)))
 (define (concept-tv x) (stv (concept-mean x) (count->confidence usize)))
-(define go-categories-with-tvs
-  (map (lambda (x) (cog-set-tv! x (concept-tv x))) go-categories))
+(define go-terms-with-tvs
+  (map (lambda (x) (cog-set-tv! x (concept-tv x))) (append go-terms go-related-terms)))
 
-(write-atoms-to-file "results/pln-step-4.scm" go-categories-with-tvs)
+(write-atoms-to-file "results/pln-step-4.scm" go-terms-with-tvs)
 
 ;; --- Step 5: Infer inverse SubsetLinks
 (format #t "--- Inferring inverse SubsetLinks...\n")
-(define go-subsets (get-go-subsets))
 ; (Subset A B) -> (Subset B A)
-(define inversed-go-subsets (map true-subset-inverse go-subsets))
+(define inversed-go-subsets (map true-subset-inverse (cog-get-atoms 'SubsetLink)))
 
 (write-atoms-to-file "results/pln-step-5.scm" inversed-go-subsets)
 
@@ -203,23 +212,95 @@
 (write-atoms-to-file "results/pln-morphism.scm"
   (append
     genes
-    go-categories
+    go-terms
+    go-related-terms
+    (cog-get-atoms 'EvaluationLink)
     (cog-get-atoms 'MemberLink)
+    (cog-get-atoms 'InheritanceLink)
     (cog-get-atoms 'SubsetLink)
     (cog-get-atoms 'AttractionLink)
     (cog-get-atoms 'IntensionalSimilarityLink)
     (cog-get-atoms 'IntensionalDifferenceLink)))
 
-; Other info in CSV format
-(define csv-fp (open-output-file "results/GO-terms"))
-(display "GO term, Initial Cardinality, Final Cardinality\n" csv-fp)
+#!
+;; ----- Misc ----- ;;
+(define go-aging (list
+  "GO:0016853" "GO:0000423" "GO:0016236" "GO:0003756"
+  "GO:0016805" "GO:0006090" "GO:0015908" "GO:0006120"
+  "GO:0045190" "GO:0006412" "GO:0009060" "GO:0006642"
+))
+
+(define go-molecular-function
+  (map
+    (lambda (g) (cog-name (gadr g)))
+    (filter
+      (lambda (e) (string=? "molecular_function" (cog-name (gddr e))))
+      (cog-incoming-by-type (Predicate "GO_namespace") 'EvaluationLink))))
+
+(define go-molecular-function-with-members
+  (filter
+    (lambda (g) (> (assoc-ref inferred-go-cardinality-alist g) 0))
+    go-molecular-function))
+
+(define (write-list-to-file filename lst)
+  (define fp (open-output-file filename))
+  (for-each
+    (lambda (x) (display (string-append x "\n") fp))
+    lst)
+  (close-port fp))
+
+(write-list-to-file "go-aging.txt" go-aging)
+(write-list-to-file "go-molecular-function.txt" go-molecular-function)
+(write-list-to-file "go-molecular-function-with-members.txt" go-molecular-function-with-members)
+
+(define target-go-list go-molecular-function-with-members)
+(define (shuffle original-lst shuffled-lst)
+  (define n (random (length original-lst) (random-state-from-platform)))
+  (define g (list-ref original-lst n))
+  (if (= (length original-lst) 1)
+    (cons (car original-lst) shuffled-lst)
+    (shuffle (delete g original-lst) (cons g shuffled-lst))))
+(define shuffled-target-go-list (shuffle target-go-list (list)))
+(set! target-go-list shuffled-target-go-list)
+
+(define gp-fp (open-output-file "go-pairs.txt"))
+(do ((i 0 (+ i 2)))
+    ((= (+ i 3) (length target-go-list)))
+  (display
+    (string-append (list-ref target-go-list i) "," (list-ref target-go-list (+ i 1)) "\n")
+    gp-fp))
+(close-port gp-fp)
+
+(pln-load 'empty)
+(pln-add-rule-by-name "intensional-difference-direct-introduction-rule")
+(define intensional-difference-results (list))
+(define intensional-difference-csv-fp (open-output-file "results/pln-intensional-differences.csv"))
+(call-with-input-file "go-pairs.txt"
+  (lambda (fp)
+    (let ((line (read-line fp)))
+      (while (not (eof-object? line))
+        (let* ((pairs (string-split line #\,))
+               (go1-str (list-ref pairs 0))
+               (go2-str (list-ref pairs 1))
+               (go1 (Concept go1-str))
+               (go2 (Concept go2-str))
+               (result (cog-outgoing-set (pln-bc (IntensionalDifference go1 go2))))
+               (tv-mean (cog-mean (car result)))
+               (tv-conf (cog-confidence (car result))))
+          (format #t "--- Done calculating intensional difference between ~a and ~a\n"
+            go1-str go2-str)
+          (display
+            (string-append line "," (number->string tv-mean) "," (number->string tv-conf) "\n")
+            intensional-difference-csv-fp)
+          (set! intensional-difference-results (append intensional-difference-results result)))
+        (set! line (read-line fp))))))
+(write-atoms-to-file "results/pln-intensional-differences.scm" intensional-difference-results)
+(close-port intensional-difference-csv-fp)
+
+(define go-cardinality-fp (open-output-file "results/go-cardinality.csv"))
 (for-each
-  (lambda (go)
-    (display
-      (format #f "~a, ~a, ~a\n"
-        (cog-name go)
-        (assoc-ref go-cardinality-alist (cog-name go))
-        (assoc-ref inferred-go-cardinality-alist (cog-name go)))
-      csv-fp))
-  go-categories)
-(close-port csv-fp)
+  (lambda (x)
+    (display (string-append (car x) "," (number->string (cdr x)) "\n") go-cardinality-fp))
+  inferred-go-cardinality-alist)
+(close-port go-cardinality-fp)
+!#
