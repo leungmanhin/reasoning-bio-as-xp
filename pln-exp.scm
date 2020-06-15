@@ -87,7 +87,7 @@
     (cog-execute!
       (Bind
         (VariableSet
-          (TypedVariable (Variable "$X") (TypeChoice (Type "ConceptNode") (Type "GeneNode")))
+          (TypedVariable (Variable "$X") (Type "ConceptNode"))
           (TypedVariable (Variable "$Y") (Type "SatisfyingSetScopeLink")))
         (Present (Member (Variable "$X") (Variable "$Y")))
         (Member
@@ -99,8 +99,6 @@
 (for-each cog-extract-recursive (cog-get-atoms 'SatisfyingSetScopeLink))
 
 (write-atoms-to-file "results/pln-step-1.scm" step-1-results)
-
-(define go-cardinality-alist (gather-cardinality))
 
 ;; --- Step 2: Turn the MemberLinks created in step 1 into InheritanceLinks
 (format #t "--- Turning MemberLinks into InheritanceLinks...\n")
@@ -230,17 +228,17 @@
   "GO:0045190" "GO:0006412" "GO:0009060" "GO:0006642"
 ))
 
-(define go-molecular-function
+(define go-biological-process
   (map
     (lambda (g) (cog-name (gadr g)))
     (filter
-      (lambda (e) (string=? "molecular_function" (cog-name (gddr e))))
+      (lambda (e) (string=? "biological_process" (cog-name (gddr e))))
       (cog-incoming-by-type (Predicate "GO_namespace") 'EvaluationLink))))
 
-(define go-molecular-function-with-members
+(define go-biological-process-with-members
   (filter
     (lambda (g) (> (assoc-ref inferred-go-cardinality-alist g) 0))
-    go-molecular-function))
+    go-biological-process))
 
 (define (write-list-to-file filename lst)
   (define fp (open-output-file filename))
@@ -250,10 +248,10 @@
   (close-port fp))
 
 (write-list-to-file "go-aging.txt" go-aging)
-(write-list-to-file "go-molecular-function.txt" go-molecular-function)
-(write-list-to-file "go-molecular-function-with-members.txt" go-molecular-function-with-members)
+(write-list-to-file "go-biological-process.txt" go-biological-process)
+(write-list-to-file "go-biological-process-with-members.txt" go-biological-process-with-members)
 
-(define target-go-list go-molecular-function-with-members)
+(define target-go-list go-biological-process-with-members)
 (define (shuffle original-lst shuffled-lst)
   (define n (random (length original-lst) (random-state-from-platform)))
   (define g (list-ref original-lst n))
@@ -265,7 +263,7 @@
 
 (define gp-fp (open-output-file "go-pairs.txt"))
 (do ((i 0 (+ i 2)))
-    ((= (+ i 3) (length target-go-list)))
+    ((>= (+ i 3) (length target-go-list)))
   (display
     (string-append (list-ref target-go-list i) "," (list-ref target-go-list (+ i 1)) "\n")
     gp-fp))

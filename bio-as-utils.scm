@@ -162,7 +162,7 @@
 "
   (let* (;; Load file in a temporary atomspace
          (base-as (cog-set-atomspace! (cog-new-atomspace)))
-         (dummy (load filename))
+         (dummy (primitive-load filename))
 
          ;; Filter in atoms satisfying pred
          (atoms (filter pred-in? (cog-get-atoms 'Atom #t)))

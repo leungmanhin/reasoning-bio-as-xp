@@ -9,6 +9,9 @@ import wget
 from gensim.models import Word2Vec
 from goatools import obo_parser
 from goatools.semantic import deepest_common_ancestor
+from opencog.atomspace import AtomSpace, types
+from opencog.type_constructors import *
+from opencog.scheme_wrapper import scheme_eval
 from scipy.spatial import distance
 
 go_obo_url = "http://geneontology.org/ontology/go-basic.obo"
@@ -18,6 +21,11 @@ pln_result_path = os.getcwd() + "/results/pln-intensional-differences.csv"
 go_cardinality_path = os.getcwd() + "/results/go-cardinality.csv"
 go_pair_path = os.getcwd() + "/go-pairs.txt"
 output_csv_path = os.getcwd() + "/results/go.csv"
+kbs = [
+  "kbs/GO_2020-04-01.scm",
+  "kbs/GO_annotation_gene-level_2020-04-01.scm",
+  "kbs/Go-Plus-GO_2020-05-04.scm"
+]
 
 if not os.path.isfile(go_obo_path):
   print("Downloading go-basic.obo...")
@@ -57,6 +65,18 @@ def vec_distance(v1, v2):
   # vec1 = w2v_model.wv.word_vec(v1, use_norm=True)
   # vec2 = w2v_model.wv.word_vec(v2, use_norm=True)
   return distance.euclidean(vec1, vec2)
+
+'''
+atomspace = AtomSpace()
+
+scheme_eval(atomspace, "(add-to-load-path \"/usr/share/guile/site/2.2/opencog\")")
+scheme_eval(atomspace, "(add-to-load-path \".\")")
+
+scheme_eval(atomspace, "(use-modules (opencog) (opencog bioscience) (opencog pln) (opencog ure))")
+scheme_eval(atomspace, "(load \"bio-as-utils.scm\")")
+for kb in kbs:
+  scheme_eval(atomspace, "(primitive-load \"{}\")".format(kb))
+'''
 
 output_csv_fp = open(output_csv_path, "w")
 first_row = ",".join([
